@@ -9,15 +9,27 @@
 # - Prompts for desired report format (html, json, pdf)
 # - Runs Kubescape scans for NSA & MITRE frameworks
 # - Saves reports locally in timestamped folders under ~/kubescape_reports
-# - Uploads reports to the specified S3 bucket/path
+# - Uploads reports and installation logs to the specified S3 bucket/path
 
 # --- Configuration ---
-DEFAULT_S3_BUCKET_NAME="kubeguard-reports"
-S3_BASE_FOLDER="kubescape-reports"
-FRAMEWORKS_TO_SCAN="nsa mitre"
-VALID_FORMATS="html json pdf"
+DEFAULT_S3_BUCKET_NAME="kubeguard-reports"   # Default bucket
+S3_BASE_FOLDER="kubescape-reports"           # Top-level folder in S3
+FRAMEWORKS_TO_SCAN="nsa mitre"               # Frameworks to scan
+VALID_FORMATS="html json pdf"                # Supported Kubescape output formats
 
 # --- Helper Functions ---
+spinner() {
+    local pid=$1 msg=$2 spin='|/-\\' i=0
+    tput civis
+    while kill -0 $pid 2>/dev/null; do
+        i=$(( (i+1) %4 ))
+        echo -ne "\r[${spin:$i:1}] ${msg}"
+        sleep 0.1
+    done
+    tput cnorm
+    echo -ne "\r                         \r"
+}
+
 check_tool() {
     TOOL_NAME=$1
     echo -n "Checking for ${TOOL_NAME}... "
@@ -45,15 +57,18 @@ check_tool() {
 }
 
 install_kubescape() {
-    LOG_FILE="${HOME}/kubescape_install.log"
-    echo "Attempting to install Kubescape... (logs: ${LOG_FILE})"
-    curl -s https://raw.githubusercontent.com/kubescape/kubescape/master/install.sh | /bin/bash >"${LOG_FILE}" 2>&1
+    INSTALL_LOG="${HOME}/kubescape_install.log"
+    echo "Attempting to install Kubescape... (logs: ${INSTALL_LOG})"
+    # Run installer in background to show spinner
+    (curl -s https://raw.githubusercontent.com/kubescape/kubescape/master/install.sh | /bin/bash >"${INSTALL_LOG}" 2>&1) &
+    spinner $! "Installing Kubescape"
+    wait $!
     export PATH=$PATH:/home/cloudshell-user/.kubescape/bin
     if ! command -v kubescape >/dev/null 2>&1; then
-        echo "[ERROR] Kubescape installation failed. See ${LOG_FILE}"
+        echo "[ERROR] Kubescape installation failed. See ${INSTALL_LOG}"
         return 1
     else
-        echo "Kubescape installed. See log: ${LOG_FILE}"
+        echo "[OK] Kubescape installed. See log: ${INSTALL_LOG}"
         echo "Tip: Add 'export PATH=\$PATH:/home/cloudshell-user/.kubescape/bin' to ~/.bashrc"
         return 0
     fi
@@ -61,10 +76,10 @@ install_kubescape() {
 
 # --- 1. Dependency Checks ---
 echo "--- Checking Prerequisites ---"
-check_tool "aws"   || exit 1
-check_tool "kubectl" || exit 1
-check_tool "git"   || exit 1
-check_tool "jq"    # recommend but non‑fatal
+check_tool "aws"    || exit 1
+check_tool "kubectl"|| exit 1
+check_tool "git"    || exit 1
+check_tool "jq"     # recommend but non-fatal
 if ! command -v kubescape >/dev/null 2>&1; then
     install_kubescape || exit 1
 else
@@ -137,23 +152,13 @@ TIMESTAMP_FOLDER="${CURRENT_DATE}/${CURRENT_TIME}"
 LOCAL_TEMP_REPORT_DIR="${HOME}/kubescape_reports/${TIMESTAMP_FOLDER}"
 mkdir -p "${LOCAL_TEMP_REPORT_DIR}" || { echo "Cannot create ${LOCAL_TEMP_REPORT_DIR}"; exit 1; }
 
-# --- 6. Spinner ---
-spinner() {
-    local pid=$1 msg=$2 spin='|/-\\' i=0
-    tput civis
-    while kill -0 $pid 2>/dev/null; do
-        i=$(( (i+1) %4 ))
-        echo -ne "
-[${spin:$i:1}] ${msg}"
-        sleep 0.1
-    done
-    tput cnorm
-    echo -ne "
-                         
-"
-}
+# Upload Kubescape install log to S3
+if [ -f "${HOME}/kubescape_install.log" ]; then
+    echo "Uploading Kubescape install log..."
+    aws s3 cp "${HOME}/kubescape_install.log" "s3://${S3_BUCKET_NAME}/${S3_BASE_FOLDER}/${TIMESTAMP_FOLDER}/kubescape_install.log" --region "${REGION}" || echo "[WARN] Failed to upload install log"
+fi
 
-# --- 7. Run Scans & Upload ---
+# --- 6. Run Scans & Upload ---
 echo "--- Starting Kubescape Scans ---"
 echo "(Terminal kept clean; see logs in ${LOCAL_TEMP_REPORT_DIR})"
 
@@ -186,6 +191,7 @@ for FRAMEWORK in $FRAMEWORKS_TO_SCAN; do
   [ $? -eq 0 ] && echo "[OK] Uploaded ${FRAMEWORK}" || { echo "[ERROR] Upload failed for ${FRAMEWORK}"; SCAN_UPLOAD_FAILED=true; }
 done
 
+# --- 7. Final Summary ---
 echo "----------------------------------------"
 if $SCAN_UPLOAD_FAILED; then
   echo "[WARN] Some scans/uploads failed. Check ${LOCAL_TEMP_REPORT_DIR}"
