@@ -1,1 +1,5 @@
-Use: ```git clone https://github.com/musheer090/kubescape-automator.git /tmp/kubescape_automator && cd /tmp/kubescape_automator && chmod +x kubescape_scan.sh && ./kubescape_scan.sh && cd .. && rm -rf /tmp/kubescape_automator```
+Use:
+
+```bash
+git clone https://github.com/musheer090/kubescape-automator.git /tmp/kubescape_automator && cd /tmp/kubescape_automator && chmod +x kubescape_scan.sh && ./kubescape_scan.sh && cd .. && rm -rf /tmp/kubescape_automator
+```
