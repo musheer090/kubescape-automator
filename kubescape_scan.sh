@@ -140,9 +140,9 @@ install_kubescape() {
 }
 
 # --- Script Start ---
-echo -e "${PURPLE}=========================================${NC}"
+echo -e "${PURPLE}======================================${NC}"
 echo -e "${PURPLE}=== ${BOLD}Enhanced Kubescape Scan Script${NC} ===${NC}"
-echo -e "${PURPLE}=========================================${NC}"
+echo -e "${PURPLE}======================================${NC}"
 echo
 
 # --- 1. Dependency Checks ---
