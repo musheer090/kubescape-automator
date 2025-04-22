@@ -12,10 +12,10 @@
 # - Uploads reports to the specified S3 bucket/path
 
 # --- Configuration ---
-DEFAULT_S3_BUCKET_NAME="kubeguard-reports"   # Default bucket
-S3_BASE_FOLDER="kubescape-reports"           # Top-level folder in S3
-FRAMEWORKS_TO_SCAN="nsa mitre"               # Frameworks to scan
-VALID_FORMATS="html json pdf"                # Supported Kubescape output formats
+DEFAULT_S3_BUCKET_NAME="kubeguard-reports"
+S3_BASE_FOLDER="kubescape-reports"
+FRAMEWORKS_TO_SCAN="nsa mitre"
+VALID_FORMATS="html json pdf"
 
 # --- Helper Functions ---
 check_tool() {
@@ -45,14 +45,15 @@ check_tool() {
 }
 
 install_kubescape() {
-    echo "Attempting to install Kubescape..."
-    curl -s https://raw.githubusercontent.com/kubescape/kubescape/master/install.sh | /bin/bash
+    LOG_FILE="${HOME}/kubescape_install.log"
+    echo "Attempting to install Kubescape... (logs: ${LOG_FILE})"
+    curl -s https://raw.githubusercontent.com/kubescape/kubescape/master/install.sh | /bin/bash >"${LOG_FILE}" 2>&1
     export PATH=$PATH:/home/cloudshell-user/.kubescape/bin
     if ! command -v kubescape >/dev/null 2>&1; then
-        echo "[ERROR] Kubescape installation failed."
+        echo "[ERROR] Kubescape installation failed. See ${LOG_FILE}"
         return 1
     else
-        echo "Kubescape installed and added to PATH for this session."
+        echo "Kubescape installed. See log: ${LOG_FILE}"
         echo "Tip: Add 'export PATH=\$PATH:/home/cloudshell-user/.kubescape/bin' to ~/.bashrc"
         return 0
     fi
@@ -138,15 +139,18 @@ mkdir -p "${LOCAL_TEMP_REPORT_DIR}" || { echo "Cannot create ${LOCAL_TEMP_REPORT
 
 # --- 6. Spinner ---
 spinner() {
-    local pid=$1 msg=$2 spin='|/-\' i=0
+    local pid=$1 msg=$2 spin='|/-\\' i=0
     tput civis
     while kill -0 $pid 2>/dev/null; do
         i=$(( (i+1) %4 ))
-        echo -ne "\r[${spin:$i:1}] ${msg}"
+        echo -ne "
+[${spin:$i:1}] ${msg}"
         sleep 0.1
     done
     tput cnorm
-    echo -ne "\r                         \r"
+    echo -ne "
+                         
+"
 }
 
 # --- 7. Run Scans & Upload ---
