@@ -1,70 +1,86 @@
-## Interactive Kubescape Scan & Report Script
+## Kubescape Scan & Report Automation Script
 
 ### 1. Overview
 
-This is an advanced, interactive shell script designed to streamline the process of running Kubescape security scans against a Kubernetes cluster. It guides the user through a series of prompts to configure the scan, automatically handles dependencies, executes scans against multiple security frameworks, and archives the resulting reports and logs to both a local directory and a specified AWS S3 bucket.
+This script provides a powerful, dual-mode solution for executing Kubescape security scans. It can be run as an **interactive wizard** for guided, on-demand scans, or as a **fully-automated, non-interactive script** suitable for CI/CD pipelines and scheduled `cron` jobs.
 
-This tool is ideal for on-demand security assessments where user input is desired to control parameters like output format and storage location.
+The script manages the entire workflow: dependency checking, automatic `kubescape` installation, multi-framework scanning (NSA, MITRE), and the archival of reports and logs to both a local directory and an AWS S3 bucket.
 
 ### 2. Features
 
-* **Interactive Setup Wizard**: Guides the user through configuration for AWS Region, S3 bucket, and report format, ensuring correct parameters for each run.
-* **Automatic Dependency Management**: Checks for required tools and features an installer that automatically downloads and configures `kubescape` if it is not found in the system's PATH.
-* **Multi-Framework Scanning**: Pre-configured to run scans against key security frameworks, including **NSA** and **MITRE**.
-* **Flexible Report Formatting**: Allows the user to select the output format for reports from a list of supported types (e.g., `html`, `json`, `pdf`).
-* **Dynamic S3 Bucket Handling**: Checks for the existence of the target S3 bucket and offers to create it on the user's behalf if it is missing.
-* **IAM Permission Awareness**: Displays the AWS identity (ARN) being used for the operations, promoting awareness of the security context, and lists the required permissions.
-* **Structured Archival**: Saves all artifacts (reports, CLI logs, installation logs) to neatly organized, timestamped directories both locally (`~/kubescape_reports/`) and in S3 for clear, auditable records.
-* **Robust Logging and Error Handling**: Captures detailed CLI output for each scan and provides a clear final summary indicating the success or failure of the operation.
+* **Dual Execution Modes**: Supports both an interactive wizard for manual runs and a fully-parameterized mode for automation.
+* **Command-Line Interface**: The non-interactive mode is controlled via standard command-line flags for easy integration.
+* **Automatic Dependency Management**: Checks for required tools and installs `kubescape` if it is not found.
+* **Multi-Framework Scanning**: Runs scans against key security frameworks, including **NSA** and **MITRE**.
+* **Flexible Report Formatting**: Allows selection of the report format (`html`, `json`, `pdf`).
+* **Automated S3 Bucket Handling**: Can be authorized via a flag to create the target S3 bucket if it doesn't exist, preventing failures in automated runs.
+* **Structured Archival**: Saves all artifacts to timestamped directories locally (`~/kubescape_reports/`) and in S3 for clear, auditable records.
+* **IAM Permission Awareness**: Displays the AWS identity being used for the operations, promoting security awareness.
 
 ### 3. Prerequisites
 
-The script requires the following command-line tools to be installed and configured on the machine where it is run:
+The following command-line tools must be installed and configured:
 
-* **AWS CLI**: Must be installed (v2 recommended) and configured with credentials for a valid IAM principal.
-* **kubectl**: Must be installed and configured with access to the target Kubernetes cluster.
-* **git**: Required for cloning the source repository.
-* **jq**: Recommended for certain script functions. The script will provide installation guidance if `jq` is missing but will not halt execution.
-
-The script will automatically attempt to install **Kubescape** if it is not already present.
+* **AWS CLI**: Configured with credentials for a valid IAM principal.
+* **kubectl**: Configured with access to the target Kubernetes cluster.
+* **git**: Required for cloning the repository.
+* **jq**: Recommended.
 
 ### 4. Usage
 
-#### 4.1. Quick Start Execution
+The script operates in one of two modes based on whether command-line flags are provided.
 
-For a single-use or trial run, the following command will clone the repository to a temporary directory, set permissions, execute the interactive script, and clean up the local repository upon completion.
+#### 4.1. Interactive Mode (for Manual Scans)
+
+Run the script without any arguments to launch the interactive wizard. It will prompt you for the AWS Region, S3 bucket, and report format.
+
+```bash
+# Clone the repository and run interactively
+git clone https://github.com/musheer090/kubescape-automator.git
+cd kubescape-automator
+chmod +x kubescape_scan_automated.sh
+./kubescape_scan_automated.sh
+```
+
+#### 4.2. Non-Interactive Mode (for Automation & Cron Jobs)
+
+Provide command-line flags to run the script without user prompts. This is the required mode for any automated environment.
+
+**Command-Line Arguments:**
+
+| Flag | Argument | Description | Required |
+| :--- | :--- | :--- | :--- |
+| `-r` | `REGION` | The AWS Region for the S3 bucket (e.g., `us-east-1`). | **Yes** |
+| `-b` | `BUCKET` | The S3 bucket name. Defaults to `kubeguard-reports`. | No |
+| `-f` | `FORMAT` | The report output format (`html`, `json`, `pdf`). Defaults to `json`. | No |
+| `-c` | | Flag to authorize the creation of the S3 bucket if it does not exist. | No |
+| `-h` | | Displays the help message. | No |
+
+**One-Liner Execution Example:**
+
+This command clones the repository, makes the script executable, and runs it in **non-interactive mode**, specifying all required parameters.
 
 ```bash
 git clone https://github.com/musheer090/kubescape-automator.git /tmp/kubescape_automator && \
 cd /tmp/kubescape_automator && \
-chmod +x kubescape_scan.sh && \
-./kubescape_scan.sh && \
+chmod +x kubescape_scan_automated.sh && \
+./kubescape_scan_automated.sh -r eu-west-2 -b my-daily-kubescape-scans -f html -c && \
 cd .. && \
 rm -rf /tmp/kubescape_automator
 ```
 
-#### 4.2. The Interactive Session
+### 5. Scheduling with Cron
 
-Upon execution, the script will prompt you for the following information:
-1.  **AWS Region**: The region where your S3 bucket is or should be located (e.g., `us-east-1`).
-2.  **S3 Bucket Name**: The name of the bucket for storing reports. A default value is provided.
-3.  **Report Format**: Your choice of output format (`html`, `json`, or `pdf`).
-4.  **S3 Bucket Creation**: If the specified bucket does not exist, you will be asked for confirmation to create it.
+To run a daily scan at 3 AM, edit your crontab (`crontab -e`) and add the following line, ensuring you use absolute paths and provide the necessary flags.
 
-### 5. IAM Permissions
+```bash
+# Run Kubescape scan every day at 3:00 AM
+0 3 * * * /path/to/your/scripts/kubescape_scan_automated.sh -r us-east-1 -b my-automated-scans -f json -c >> /var/log/kubescape_cron.log 2>&1
+```
 
-The IAM principal (User or Role) executing this script requires the following minimum permissions on AWS.
+### 6. IAM Permissions
 
-| Permission | Purpose |
-| :--- | :--- |
-| `sts:GetCallerIdentity` | To verify and display the AWS identity being used by the script. |
-| `s3:HeadBucket` | To check if the target S3 bucket exists. |
-| `s3:CreateBucket` | (Optional) To create the S3 bucket if it doesn't exist and the user consents. |
-| `s3:PutObject` | To upload the reports and log files to the S3 bucket. |
-
-**Sample IAM Policy:**
-
-*Note: Replace `<BUCKET_NAME>` with the name of the S3 bucket you intend to use.*
+The IAM principal executing the script requires the following minimum permissions.
 
 ```json
 {
@@ -83,30 +99,15 @@ The IAM principal (User or Role) executing this script requires the following mi
                 "s3:HeadBucket",
                 "s3:CreateBucket"
             ],
-            "Resource": "arn:aws:s3:::<BUCKET_NAME>"
+            "Resource": "arn:aws:s3:::<YOUR_BUCKET_NAME>"
         },
         {
             "Sid": "AllowReportUpload",
             "Effect": "Allow",
             "Action": "s3:PutObject",
-            "Resource": "arn:aws:s3:::<BUCKET_NAME>/kubescape-reports/*"
+            "Resource": "arn:aws:s3:::<YOUR_BUCKET_NAME>/kubescape-reports/*"
         }
     ]
 }
 ```
-
-### 6. Output Artifacts
-
-The script generates and archives several files for each run.
-
-* **Local Storage**: All artifacts are stored locally in `~/kubescape_reports/YYYY-MM-DD/HHMMSS/`.
-* **S3 Storage**: All artifacts are uploaded to `s3://<BUCKET_NAME>/kubescape-reports/YYYY-MM-DD/HHMMSS/`.
-
-The following files are generated for each scanned framework (e.g., NSA):
-* `NSA_Report_[...].<format>`: The main security report in the format you selected.
-* `NSA_Scan_CLI_[...].log`: The complete stdout/stderr from the Kubescape command for debugging and auditing.
-* `kubescape_install.log`: (If applicable) The log from the Kubescape installation process.
-
-### 7. Note on Automation
-
-Due to its interactive nature, this script is not suitable for use in non-interactive, automated environments like a standard `cron` job. To adapt this script for full automation, the interactive `read` prompts would need to be replaced with a mechanism for parsing command-line arguments (e.g., using `getopts`).
+***Note: Replace `<YOUR_BUCKET_NAME>` with your actual bucket name.***
