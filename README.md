@@ -64,7 +64,7 @@ This command clones the repository, makes the script executable, and runs it in 
 git clone https://github.com/musheer090/kubescape-automator.git /tmp/kubescape_automator && \
 cd /tmp/kubescape_automator && \
 chmod +x kubescape_scan_automated.sh && \
-./kubescape_scan_automated.sh -r eu-west-2 -b my-daily-kubescape-scans -f html -c && \
+./kubescape_scan_automated.sh -r ap-south-1 -b kubeguard-reports -f html -c && \
 cd .. && \
 rm -rf /tmp/kubescape_automator
 ```
